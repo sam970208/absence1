@@ -6,23 +6,28 @@
 
 <title>缺課管理</title>
 
+<link rel="apple-touch-icon" href="icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="缺課管理">
 
 <style>
 body{margin:0;font-family:-apple-system;background:#f2f4f8;}
 .header{background:#2f6bff;color:#fff;padding:20px;font-size:20px;}
-.container{padding:15px;}
+.container{padding:15px;padding-bottom:100px;}
 .card{background:#fff;border-radius:16px;padding:15px;margin-bottom:12px;}
 .item{display:flex;justify-content:space-between;margin:6px 0;}
 .btn{background:#2f6bff;color:#fff;border:none;padding:6px 10px;border-radius:10px;}
-.progress{height:6px;background:#eee;border-radius:10px;margin-top:5px;}
-.bar{height:100%;background:#2f6bff;border-radius:10px;}
-.danger .bar{background:#ff3b30;}
-.nav{position:fixed;bottom:0;left:0;right:0;background:#fff;display:flex;justify-content:space-around;padding:10px;border-top:1px solid #ddd;}
-.nav div{cursor:pointer}
+.btn:disabled{background:#ccc;}
+.del{background:#ff3b30;}
+.nav{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);
+width:90%;background:#fff;display:flex;justify-content:space-around;
+padding:12px;border-radius:20px;box-shadow:0 5px 20px rgba(0,0,0,0.1);}
 .page{display:none;}
 .active{display:block;}
+.progress{height:6px;background:#eee;border-radius:10px;margin-top:5px;}
+.bar{height:100%;background:#2f6bff;border-radius:10px;}
+.warn .bar{background:#ff9500;}
+.danger .bar{background:#ff3b30;}
 </style>
 </head>
 
@@ -37,28 +42,41 @@ body{margin:0;font-family:-apple-system;background:#f2f4f8;}
 <div class="card" id="schedule"></div>
 
 <div class="card">
-<h3>📅 區間請假</h3>
+<h3>📆 區間請假</h3>
 <input type="date" id="start">
 <input type="date" id="end">
-<button class="btn" onclick="addRange()">請假</button>
+<button class="btn" onclick="addRange()">整段請假</button>
+</div>
+</div>
+
+<!-- 補登 -->
+<div id="page2" class="page">
+<div class="card">
+<h3>補登</h3>
+<input type="date" id="manualDate">
+<select id="manualPeriod">
+<option value="0">第1節</option>
+<option value="1">第2節</option>
+<option value="2">第3節</option>
+<option value="3">第4節</option>
+<option value="4">第5節</option>
+<option value="5">第6節</option>
+<option value="6">第7節</option>
+</select>
+<button class="btn" onclick="addManual()">補登</button>
 </div>
 </div>
 
 <!-- 統計 -->
-<div id="page2" class="page">
-<div class="card"><h3>📊 統計</h3><div id="stats"></div></div>
+<div id="page3" class="page">
+<div class="card"><h3>統計</h3><div id="stats"></div></div>
 </div>
 
 <!-- 紀錄 -->
-<div id="page3" class="page">
-<div class="card"><h3>📅 紀錄</h3><div id="history"></div></div>
-</div>
-
-<!-- 設定 -->
 <div id="page4" class="page">
+<div class="card"><h3>紀錄</h3><div id="history"></div></div>
 <div class="card">
-<h3>⚙️ 設定</h3>
-<button class="btn" onclick="clearData()">清除全部資料</button>
+<button class="btn del" onclick="clearAll()">全部清除</button>
 </div>
 </div>
 
@@ -66,9 +84,9 @@ body{margin:0;font-family:-apple-system;background:#f2f4f8;}
 
 <div class="nav">
 <div onclick="showPage(1)">課表</div>
-<div onclick="showPage(2)">統計</div>
-<div onclick="showPage(3)">紀錄</div>
-<div onclick="showPage(4)">設定</div>
+<div onclick="showPage(2)">補登</div>
+<div onclick="showPage(3)">統計</div>
+<div onclick="showPage(4)">紀錄</div>
 </div>
 
 <script>
@@ -81,101 +99,185 @@ const schedule={
 };
 
 let records=JSON.parse(localStorage.getItem("records")||"[]");
+let warned=JSON.parse(localStorage.getItem("warned")||"{}");
 
 function showPage(n){
 document.querySelectorAll(".page").forEach(p=>p.classList.remove("active"));
 document.getElementById("page"+n).classList.add("active");
 }
 
+function todayStr(){ return new Date().toLocaleDateString(); }
+
+// 課表
+function renderSchedule(){
 let d=new Date().getDay();
 let today=schedule[d]||[];
-
 let html="";
+
 today.forEach((c,i)=>{
-html+=`<div class="item">
+let exists=records.some(r=>r.date===todayStr() && r.period===i);
+
+html+=`
+<div class="item">
 <span>第${i+1}節 ${c}</span>
-<button class="btn" onclick="add('${c}')">缺課</button>
+<button class="btn" ${exists?"disabled":""} onclick="add(${i})">
+${exists?"已記錄":"缺課"}
+</button>
 </div>`;
 });
-document.getElementById("schedule").innerHTML=html||"今天沒課";
 
-function add(c){
-records.push({c,date:new Date().toLocaleDateString()});
-save();update();notify();
+document.getElementById("schedule").innerHTML=html||"今天沒課";
 }
 
+function add(i){
+let d=new Date();
+let date=d.toLocaleDateString();
+let course=schedule[d.getDay()][i];
+
+if(records.some(r=>r.date===date && r.period===i)) return;
+
+records.push({date,period:i,course});
+save();renderAll();checkWarning();
+}
+
+// 區間請假
 function addRange(){
 let s=document.getElementById("start").value;
 let e=document.getElementById("end").value;
+if(!s||!e) return alert("請選日期");
 
 let start=new Date(s);
 let end=new Date(e);
 
 while(start<=end){
 let day=start.getDay();
+let dateStr=start.toLocaleDateString();
+
 if(schedule[day]){
-schedule[day].forEach(c=>{
-records.push({c,date:start.toLocaleDateString()});
+schedule[day].forEach((c,i)=>{
+if(!records.some(r=>r.date===dateStr && r.period===i)){
+records.push({date:dateStr,period:i,course:c});
+}
 });
 }
 start.setDate(start.getDate()+1);
 }
 
-save();update();notify();
+save();renderAll();checkWarning();
 }
 
-function save(){
-localStorage.setItem("records",JSON.stringify(records));
+// 補登
+function addManual(){
+let d=document.getElementById("manualDate").value;
+let p=parseInt(document.getElementById("manualPeriod").value);
+
+if(!d)return alert("請選日期");
+
+let dateObj=new Date(d);
+let course=schedule[dateObj.getDay()]?.[p];
+if(!course)return alert("這節沒課");
+
+let dateStr=dateObj.toLocaleDateString();
+if(records.some(r=>r.date===dateStr && r.period===p)) return;
+
+records.push({date:dateStr,period:p,course});
+save();renderAll();checkWarning();
 }
 
-function update(){
+// 統計
+function renderStats(){
 let map={};
-records.forEach(r=>map[r.c]=(map[r.c]||0)+1);
+records.forEach(r=>map[r.course]=(map[r.course]||0)+1);
 
-let stats="",history="";
+let html="";
 for(let c in map){
-let n=map[c],t=28;
+let n=map[c];
+let t=28;
 if(c==="數學甲")t=56;
 if(c==="團體活動時間")t=42;
 
 let rate=n/t;
-stats+=`
-<div class="${rate>=0.33?'danger':''}">
+let cls=rate>=0.33?"danger":rate>=0.2?"warn":"";
+
+html+=`
+<div class="${cls}">
 ${c} ${n}/${t}
 <div class="progress"><div class="bar" style="width:${rate*100}%"></div></div>
 </div>`;
 }
+document.getElementById("stats").innerHTML=html;
+}
 
-records.forEach(r=>{
-history+=`<div>${r.date} ${r.c}</div>`;
+// 紀錄
+function renderHistory(){
+let html="";
+records.forEach((r,i)=>{
+html+=`
+<div class="item">
+<span>${r.date} 第${r.period+1}節 ${r.course}</span>
+<button class="btn del" onclick="del(${i})">刪</button>
+</div>`;
 });
-
-document.getElementById("stats").innerHTML=stats;
-document.getElementById("history").innerHTML=history;
+document.getElementById("history").innerHTML=html;
 }
 
-function clearData(){
-if(confirm("確定清除？")){
+function del(i){
+records.splice(i,1);
+save();renderAll();
+}
+
+// 🔥 全部清除（最強版）
+function clearAll(){
+if(!confirm("⚠️ 確定全部清除？不可復原")) return;
+
+localStorage.clear();
 records=[];
-save();
-update();
-}
+warned={};
+
+document.getElementById("schedule").innerHTML="";
+document.getElementById("stats").innerHTML="";
+document.getElementById("history").innerHTML="";
+
+setTimeout(()=>location.reload(),200);
 }
 
-function notify(){
+function save(){
+localStorage.setItem("records",JSON.stringify(records));
+localStorage.setItem("warned",JSON.stringify(warned));
+}
+
+// 預警
+function checkWarning(){
 let map={};
-records.forEach(r=>map[r.c]=(map[r.c]||0)+1);
+records.forEach(r=>map[r.course]=(map[r.course]||0)+1);
 
 for(let c in map){
-let rate=map[c]/28;
-if(rate>=0.33){
-alert("⚠️ "+c+" 已達1/3缺課");
-return;
+let n=map[c];
+let t=28;
+if(c==="數學甲")t=56;
+if(c==="團體活動時間")t=42;
+
+let rate=n/t;
+
+if(rate>=0.2 && !warned[c+"_20"]){
+alert("⚠️ "+c+" 已達1/5");
+warned[c+"_20"]=true;
+}
+if(rate>=0.33 && !warned[c+"_33"]){
+alert("🚨 "+c+" 已達1/3");
+warned[c+"_33"]=true;
 }
 }
+save();
 }
 
-update();
+function renderAll(){
+renderSchedule();
+renderStats();
+renderHistory();
+}
+
+renderAll();
 </script>
 
 </body>
