@@ -8,41 +8,67 @@
 
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="缺課管理">
-<link rel="apple-touch-icon" href="icon.png">
 
 <style>
-body{margin:0;font-family:-apple-system;background:#f2f4f8;padding:15px;}
-.card{background:#fff;border-radius:16px;padding:12px;margin-bottom:10px;}
-button{background:#007aff;color:#fff;border:none;padding:6px 10px;border-radius:8px;}
+body{margin:0;font-family:-apple-system;background:#f2f4f8;}
+.header{background:#2f6bff;color:#fff;padding:20px;font-size:20px;}
+.container{padding:15px;}
+.card{background:#fff;border-radius:16px;padding:15px;margin-bottom:12px;}
 .item{display:flex;justify-content:space-between;margin:6px 0;}
-.progress{height:6px;background:#ddd;border-radius:10px;}
-.bar{height:100%;background:#007aff;border-radius:10px;}
+.btn{background:#2f6bff;color:#fff;border:none;padding:6px 10px;border-radius:10px;}
+.progress{height:6px;background:#eee;border-radius:10px;margin-top:5px;}
+.bar{height:100%;background:#2f6bff;border-radius:10px;}
 .danger .bar{background:#ff3b30;}
+.nav{position:fixed;bottom:0;left:0;right:0;background:#fff;display:flex;justify-content:space-around;padding:10px;border-top:1px solid #ddd;}
+.nav div{cursor:pointer}
+.page{display:none;}
+.active{display:block;}
 </style>
 </head>
 
 <body>
 
-<h2 id="day"></h2>
+<div class="header">缺課管理</div>
 
+<div class="container">
+
+<!-- 課表 -->
+<div id="page1" class="page active">
 <div class="card" id="schedule"></div>
 
 <div class="card">
 <h3>📅 區間請假</h3>
 <input type="date" id="start">
 <input type="date" id="end">
-<button onclick="addRange()">請假</button>
+<button class="btn" onclick="addRange()">請假</button>
+</div>
 </div>
 
-<div class="card">
-<h3>📊 統計</h3>
-<div id="stats"></div>
+<!-- 統計 -->
+<div id="page2" class="page">
+<div class="card"><h3>📊 統計</h3><div id="stats"></div></div>
 </div>
 
+<!-- 紀錄 -->
+<div id="page3" class="page">
+<div class="card"><h3>📅 紀錄</h3><div id="history"></div></div>
+</div>
+
+<!-- 設定 -->
+<div id="page4" class="page">
 <div class="card">
-<h3>🏆 排行榜</h3>
-<div id="rank"></div>
+<h3>⚙️ 設定</h3>
+<button class="btn" onclick="clearData()">清除全部資料</button>
+</div>
+</div>
+
+</div>
+
+<div class="nav">
+<div onclick="showPage(1)">課表</div>
+<div onclick="showPage(2)">統計</div>
+<div onclick="showPage(3)">紀錄</div>
+<div onclick="showPage(4)">設定</div>
 </div>
 
 <script>
@@ -56,16 +82,19 @@ const schedule={
 
 let records=JSON.parse(localStorage.getItem("records")||"[]");
 
-let d=new Date().getDay();
-let names=["日","一","二","三","四","五","六"];
-document.getElementById("day").innerText="今天：星期"+names[d];
+function showPage(n){
+document.querySelectorAll(".page").forEach(p=>p.classList.remove("active"));
+document.getElementById("page"+n).classList.add("active");
+}
 
+let d=new Date().getDay();
 let today=schedule[d]||[];
+
 let html="";
 today.forEach((c,i)=>{
 html+=`<div class="item">
 <span>第${i+1}節 ${c}</span>
-<button onclick="add('${c}')">缺課</button>
+<button class="btn" onclick="add('${c}')">缺課</button>
 </div>`;
 });
 document.getElementById("schedule").innerHTML=html||"今天沒課";
@@ -78,7 +107,6 @@ save();update();notify();
 function addRange(){
 let s=document.getElementById("start").value;
 let e=document.getElementById("end").value;
-if(!s||!e)return alert("選日期");
 
 let start=new Date(s);
 let end=new Date(e);
@@ -100,45 +128,48 @@ function save(){
 localStorage.setItem("records",JSON.stringify(records));
 }
 
-function total(c){
-if(c==="數學甲")return 56;
-if(c==="團體活動時間")return 42;
-return 28;
-}
-
 function update(){
 let map={};
 records.forEach(r=>map[r.c]=(map[r.c]||0)+1);
 
-let stats="";
+let stats="",history="";
 for(let c in map){
-let n=map[c],t=total(c),rate=n/t;
+let n=map[c],t=28;
+if(c==="數學甲")t=56;
+if(c==="團體活動時間")t=42;
+
+let rate=n/t;
 stats+=`
 <div class="${rate>=0.33?'danger':''}">
 ${c} ${n}/${t}
 <div class="progress"><div class="bar" style="width:${rate*100}%"></div></div>
 </div>`;
 }
-document.getElementById("stats").innerHTML=stats||"尚無";
 
-let arr=Object.entries(map).sort((a,b)=>b[1]-a[1]);
-document.getElementById("rank").innerHTML=
-arr.map(i=>`<div>${i[0]} ${i[1]}</div>`).join("")||"尚無";
+records.forEach(r=>{
+history+=`<div>${r.date} ${r.c}</div>`;
+});
+
+document.getElementById("stats").innerHTML=stats;
+document.getElementById("history").innerHTML=history;
+}
+
+function clearData(){
+if(confirm("確定清除？")){
+records=[];
+save();
+update();
+}
 }
 
 function notify(){
-if(Notification.permission!=="granted"){
-Notification.requestPermission();
-return;
-}
-
 let map={};
 records.forEach(r=>map[r.c]=(map[r.c]||0)+1);
 
 for(let c in map){
-let rate=map[c]/total(c);
+let rate=map[c]/28;
 if(rate>=0.33){
-new Notification("⚠️ 缺課警告",{body:c+" 已達1/3缺課"});
+alert("⚠️ "+c+" 已達1/3缺課");
 return;
 }
 }
