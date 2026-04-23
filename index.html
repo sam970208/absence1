@@ -14,20 +14,37 @@
 body{margin:0;font-family:-apple-system;background:#f2f4f8;}
 .header{background:#2f6bff;color:#fff;padding:20px;font-size:20px;}
 .container{padding:15px;padding-bottom:100px;}
-.card{background:#fff;border-radius:16px;padding:15px;margin-bottom:12px;}
+.card{background:#fff;border-radius:14px;padding:15px;margin-bottom:12px;}
 .item{display:flex;justify-content:space-between;margin:6px 0;}
-.btn{background:#2f6bff;color:#fff;border:none;padding:6px 10px;border-radius:10px;}
-.btn:disabled{background:#ccc;}
+button{background:#2f6bff;color:#fff;border:none;padding:6px 10px;border-radius:8px;}
+button:disabled{background:#ccc;}
 .del{background:#ff3b30;}
-.nav{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);
-width:90%;background:#fff;display:flex;justify-content:space-around;
-padding:12px;border-radius:20px;box-shadow:0 5px 20px rgba(0,0,0,0.1);}
-.page{display:none;}
-.active{display:block;}
-.progress{height:6px;background:#eee;border-radius:10px;margin-top:5px;}
-.bar{height:100%;background:#2f6bff;border-radius:10px;}
+
+.progress{
+height:6px;
+background:#eee;
+border-radius:10px;
+margin-top:5px;
+}
+.bar{
+height:100%;
+background:#2f6bff;
+border-radius:10px;
+}
 .warn .bar{background:#ff9500;}
 .danger .bar{background:#ff3b30;}
+
+.nav{
+position:fixed;bottom:20px;left:50%;
+transform:translateX(-50%);
+width:90%;background:#fff;
+display:flex;justify-content:space-around;
+padding:10px;border-radius:20px;
+box-shadow:0 5px 15px rgba(0,0,0,0.1);
+}
+
+.page{display:none;}
+.active{display:block;}
 </style>
 </head>
 
@@ -42,10 +59,10 @@ padding:12px;border-radius:20px;box-shadow:0 5px 20px rgba(0,0,0,0.1);}
 <div class="card" id="schedule"></div>
 
 <div class="card">
-<h3>📆 區間請假</h3>
+<h3>區間請假</h3>
 <input type="date" id="start">
 <input type="date" id="end">
-<button class="btn" onclick="addRange()">整段請假</button>
+<button onclick="addRange()">請假</button>
 </div>
 </div>
 
@@ -54,29 +71,41 @@ padding:12px;border-radius:20px;box-shadow:0 5px 20px rgba(0,0,0,0.1);}
 <div class="card">
 <h3>補登</h3>
 <input type="date" id="manualDate">
-<select id="manualPeriod">
-<option value="0">第1節</option>
-<option value="1">第2節</option>
-<option value="2">第3節</option>
-<option value="3">第4節</option>
-<option value="4">第5節</option>
-<option value="5">第6節</option>
-<option value="6">第7節</option>
-</select>
-<button class="btn" onclick="addManual()">補登</button>
+<select id="manualPeriod"></select>
+<button onclick="addManual()">補登</button>
 </div>
 </div>
 
-<!-- 統計 -->
+<!-- 統計（含進度條） -->
 <div id="page3" class="page">
-<div class="card"><h3>統計</h3><div id="stats"></div></div>
+<div class="card">
+<h3>統計</h3>
+<div id="stats"></div>
+</div>
 </div>
 
 <!-- 紀錄 -->
 <div id="page4" class="page">
-<div class="card"><h3>紀錄</h3><div id="history"></div></div>
 <div class="card">
-<button class="btn del" onclick="clearAll()">全部清除</button>
+<h3>紀錄</h3>
+<div id="history"></div>
+</div>
+<button class="del" onclick="clearAll()">全部清除</button>
+</div>
+
+<!-- 設定 -->
+<div id="page5" class="page">
+<div class="card">
+<h3>學期</h3>
+<input type="date" id="termStart">
+<input type="date" id="termEnd">
+<button onclick="saveTerm()">儲存</button>
+</div>
+
+<div class="card">
+<h3>課表</h3>
+<div id="editor"></div>
+<button onclick="saveSchedule()">儲存課表</button>
 </div>
 </div>
 
@@ -87,10 +116,13 @@ padding:12px;border-radius:20px;box-shadow:0 5px 20px rgba(0,0,0,0.1);}
 <div onclick="showPage(2)">補登</div>
 <div onclick="showPage(3)">統計</div>
 <div onclick="showPage(4)">紀錄</div>
+<div onclick="showPage(5)">設定</div>
 </div>
 
 <script>
-const schedule={
+
+// ⭐ 資料
+let schedule=JSON.parse(localStorage.getItem("schedule"))||{
 1:["微積分導論（二）","微積分導論（二）","英文閱讀與寫作","體育","數學甲","語文表達與傳播應用","悅讀樂科學（二）"],
 2:["彈性學習時間","英語聽講","數學甲","選修物理－電磁現象二與量子現象","藝術生活","各類文學選讀","各類文學選讀"],
 3:["語文表達與傳播應用","數學甲","選修化學－化學反應與平衡二","英文閱讀與寫作","未來想像與生涯進路","體育","選修物理－電磁現象二與量子現象"],
@@ -101,37 +133,40 @@ const schedule={
 let records=JSON.parse(localStorage.getItem("records")||"[]");
 let warned=JSON.parse(localStorage.getItem("warned")||"{}");
 
+let termStart=localStorage.getItem("termStart")||"2026-02-23";
+let termEnd=localStorage.getItem("termEnd")||"2026-06-04";
+
 function showPage(n){
 document.querySelectorAll(".page").forEach(p=>p.classList.remove("active"));
 document.getElementById("page"+n).classList.add("active");
 }
 
-function todayStr(){ return new Date().toLocaleDateString(); }
+function todayStr(){return new Date().toLocaleDateString();}
 
 // 課表
 function renderSchedule(){
 let d=new Date().getDay();
 let today=schedule[d]||[];
-let html="";
 
+let html="";
 today.forEach((c,i)=>{
-let exists=records.some(r=>r.date===todayStr() && r.period===i);
+let exists=records.some(r=>r.date===todayStr()&&r.period===i);
 
 html+=`
 <div class="item">
-<span>第${i+1}節 ${c}</span>
-<button class="btn" ${exists?"disabled":""} onclick="add(${i})">
+第${i+1}節 ${c}
+<button ${exists?"disabled":""} onclick="add(${i})">
 ${exists?"已記錄":"缺課"}
 </button>
 </div>`;
 });
-
 document.getElementById("schedule").innerHTML=html||"今天沒課";
 }
 
+// 新增缺課
 function add(i){
 let d=new Date();
-let date=d.toLocaleDateString();
+let date=todayStr();
 let course=schedule[d.getDay()][i];
 
 if(records.some(r=>r.date===date && r.period===i)) return;
@@ -140,18 +175,37 @@ records.push({date,period:i,course});
 save();renderAll();checkWarning();
 }
 
+// 補登
+let sel=document.getElementById("manualPeriod");
+for(let i=0;i<7;i++){
+let o=document.createElement("option");
+o.value=i;o.text="第"+(i+1)+"節";
+sel.appendChild(o);
+}
+
+function addManual(){
+let d=new Date(document.getElementById("manualDate").value);
+let p=parseInt(sel.value);
+
+let course=schedule[d.getDay()]?.[p];
+if(!course)return alert("沒課");
+
+let date=d.toLocaleDateString();
+
+if(records.some(r=>r.date===date && r.period===p)) return;
+
+records.push({date,period:p,course});
+save();renderAll();checkWarning();
+}
+
 // 區間請假
 function addRange(){
-let s=document.getElementById("start").value;
-let e=document.getElementById("end").value;
-if(!s||!e) return alert("請選日期");
+let s=new Date(document.getElementById("start").value);
+let e=new Date(document.getElementById("end").value);
 
-let start=new Date(s);
-let end=new Date(e);
-
-while(start<=end){
-let day=start.getDay();
-let dateStr=start.toLocaleDateString();
+while(s<=e){
+let day=s.getDay();
+let dateStr=s.toLocaleDateString();
 
 if(schedule[day]){
 schedule[day].forEach((c,i)=>{
@@ -160,49 +214,49 @@ records.push({date:dateStr,period:i,course:c});
 }
 });
 }
-start.setDate(start.getDate()+1);
+s.setDate(s.getDate()+1);
 }
-
 save();renderAll();checkWarning();
 }
 
-// 補登
-function addManual(){
-let d=document.getElementById("manualDate").value;
-let p=parseInt(document.getElementById("manualPeriod").value);
+// 精準計算
+function calcTotals(){
+let totals={};
+let s=new Date(termStart);
+let e=new Date(termEnd);
 
-if(!d)return alert("請選日期");
-
-let dateObj=new Date(d);
-let course=schedule[dateObj.getDay()]?.[p];
-if(!course)return alert("這節沒課");
-
-let dateStr=dateObj.toLocaleDateString();
-if(records.some(r=>r.date===dateStr && r.period===p)) return;
-
-records.push({date:dateStr,period:p,course});
-save();renderAll();checkWarning();
+while(s<=e){
+let day=s.getDay();
+if(schedule[day]){
+schedule[day].forEach(c=>{
+totals[c]=(totals[c]||0)+1;
+});
+}
+s.setDate(s.getDate()+1);
+}
+return totals;
 }
 
-// 統計
+// 📊 統計＋進度條
 function renderStats(){
+let totals=calcTotals();
 let map={};
 records.forEach(r=>map[r.course]=(map[r.course]||0)+1);
 
 let html="";
-for(let c in map){
-let n=map[c];
-let t=28;
-if(c==="數學甲")t=56;
-if(c==="團體活動時間")t=42;
-
+for(let c in totals){
+let n=map[c]||0;
+let t=totals[c];
 let rate=n/t;
+
 let cls=rate>=0.33?"danger":rate>=0.2?"warn":"";
 
 html+=`
 <div class="${cls}">
-${c} ${n}/${t}
-<div class="progress"><div class="bar" style="width:${rate*100}%"></div></div>
+${c} ${n}/${t} (${Math.round(rate*100)}%)
+<div class="progress">
+<div class="bar" style="width:${rate*100}%"></div>
+</div>
 </div>`;
 }
 document.getElementById("stats").innerHTML=html;
@@ -212,11 +266,7 @@ document.getElementById("stats").innerHTML=html;
 function renderHistory(){
 let html="";
 records.forEach((r,i)=>{
-html+=`
-<div class="item">
-<span>${r.date} 第${r.period+1}節 ${r.course}</span>
-<button class="btn del" onclick="del(${i})">刪</button>
-</div>`;
+html+=`${r.date} 第${r.period+1}節 ${r.course} <button onclick="del(${i})">刪</button><br>`;
 });
 document.getElementById("history").innerHTML=html;
 }
@@ -226,38 +276,27 @@ records.splice(i,1);
 save();renderAll();
 }
 
-// 🔥 全部清除（最強版）
+// 清除
 function clearAll(){
-if(!confirm("⚠️ 確定全部清除？不可復原")) return;
-
+if(!confirm("確定全部清除？")) return;
 localStorage.clear();
-records=[];
-warned={};
-
-document.getElementById("schedule").innerHTML="";
-document.getElementById("stats").innerHTML="";
-document.getElementById("history").innerHTML="";
-
-setTimeout(()=>location.reload(),200);
+location.reload();
 }
 
+// 儲存
 function save(){
 localStorage.setItem("records",JSON.stringify(records));
 localStorage.setItem("warned",JSON.stringify(warned));
 }
 
-// 預警
+// 提醒
 function checkWarning(){
+let totals=calcTotals();
 let map={};
 records.forEach(r=>map[r.course]=(map[r.course]||0)+1);
 
 for(let c in map){
-let n=map[c];
-let t=28;
-if(c==="數學甲")t=56;
-if(c==="團體活動時間")t=42;
-
-let rate=n/t;
+let rate=map[c]/totals[c];
 
 if(rate>=0.2 && !warned[c+"_20"]){
 alert("⚠️ "+c+" 已達1/5");
@@ -271,13 +310,45 @@ warned[c+"_33"]=true;
 save();
 }
 
+// 設定
+function saveTerm(){
+termStart=document.getElementById("termStart").value;
+termEnd=document.getElementById("termEnd").value;
+localStorage.setItem("termStart",termStart);
+localStorage.setItem("termEnd",termEnd);
+renderAll();
+}
+
+// 課表編輯
+function renderEditor(){
+let html="";
+for(let d=1;d<=5;d++){
+html+="週"+d+": ";
+schedule[d].forEach((c,i)=>{
+html+=`<input value="${c}" onchange="schedule[${d}][${i}]=this.value">`;
+});
+html+="<br>";
+}
+document.getElementById("editor").innerHTML=html;
+}
+
+function saveSchedule(){
+localStorage.setItem("schedule",JSON.stringify(schedule));
+renderAll();
+}
+
+// 初始化
 function renderAll(){
 renderSchedule();
 renderStats();
 renderHistory();
+renderEditor();
+document.getElementById("termStart").value=termStart;
+document.getElementById("termEnd").value=termEnd;
 }
 
 renderAll();
+
 </script>
 
 </body>
